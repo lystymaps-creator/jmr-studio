@@ -335,6 +335,26 @@ body[data-mode="worstBest"] .worstBestOnly{display:block}
 }
 @media (max-width:430px){ .panel{width:100vw} }
 
+
+/* Export to iPhone Photos: show individual full-resolution PNGs if native sharing is unavailable. */
+.v2-photo-gallery{position:fixed;inset:0;z-index:95;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.78);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.v2-photo-gallery.show{display:flex}
+.v2-photo-panel{width:100%;max-width:620px;max-height:calc(100dvh - env(safe-area-inset-top) - 12px);background:#111018;color:#f5edf9;border:1px solid #41354f;border-radius:20px 20px 0 0;display:flex;flex-direction:column;overflow:hidden}
+.v2-photo-head{padding:18px 16px 12px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #30273a;flex:none}
+.v2-photo-head strong{font-size:15px;flex:1}.v2-photo-head button{border:1px solid #4c4057;background:#26202d;color:#eee;border-radius:10px;min-width:42px;min-height:42px;font-size:24px;cursor:pointer}
+.v2-photo-scroll{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:14px 16px 20px;flex:1}
+.v2-photo-help{font-size:12px;color:#bcb0c9;line-height:1.5;margin:0 0 13px}
+.v2-photo-share-all{width:100%;min-height:48px;background:#962de0;border:1px solid #ae63e6;border-radius:12px;color:#fff;font-size:14px;font-weight:800;margin-bottom:14px;cursor:pointer}
+.v2-photo-share-all[hidden]{display:none}
+.v2-photo-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #342b3b}
+.v2-photo-item img{width:80px;height:117px;object-fit:cover;background:#1e1b26;border-radius:7px;flex:none}
+.v2-photo-info{min-width:0;flex:1;display:flex;flex-direction:column;gap:9px}
+.v2-photo-info b{font-size:12px;white-space:normal;overflow-wrap:anywhere}
+.v2-photo-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.v2-photo-actions button,.v2-photo-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 12px;border:1px solid #5c446d;border-radius:9px;background:#292133;color:#f0e4fa;text-decoration:none;font-weight:700;font-size:12px;cursor:pointer}
+.v2-photo-actions [hidden]{display:none}
+.v2-photo-message{font-size:12px;color:#c0b6cd;min-height:18px;margin-top:10px}
+
 </style>
 <style id="v2Styles">
 :root{--v2-purple:#a32bef;--v2-elev:#171720;--v2-soft:#20212b;--v2-line:#30313f;--v2-muted:#989aaa;--v2-text:#f1f0f8}
@@ -593,6 +613,18 @@ body{height:auto!important;min-height:100dvh!important;overflow-x:hidden!importa
 <div class="v2-cols"><button class="v2-ghost" id="v2Backup">Download project</button><button class="v2-ghost" id="v2Restore">Load project</button></div><input id="v2RestoreInput" type="file" accept=".json,.jmr.json,application/json" hidden>
 </div><div class="v2-settings-footer"><button id="v2ApplyCurrent">Apply to current</button><button class="primary" id="v2SaveDefaults">Save defaults</button></div></div></div>
 <div id="v2ImporterOverlay" class="v2-overlay"><div class="v2-overlay-inner"><div class="v2-overlay-head"><strong>IMPORT ALBUM</strong><button id="v2CloseImporter" aria-label="Close importer">×</button></div><div class="v2-import-wrap"><iframe title="Album importer" id="v2ImporterFrame"></iframe></div></div></div>
+
+<div id="v2PhotoGallery" class="v2-photo-gallery" role="dialog" aria-modal="true" aria-label="Export PNG images">
+  <div class="v2-photo-panel">
+    <div class="v2-photo-head"><strong id="v2PhotoTitle">PNG images</strong><button id="v2PhotoClose" aria-label="Close PNG images" type="button">×</button></div>
+    <div class="v2-photo-scroll">
+      <p class="v2-photo-help" id="v2PhotoHelp">Save the PNG images to Photos using the iOS share sheet.</p>
+      <button class="v2-photo-share-all" id="v2PhotoShareAll" type="button">Share All PNGs</button>
+      <div id="v2PhotoList"></div>
+      <div class="v2-photo-message" id="v2PhotoMessage" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+</div>
 <div id="v2Toast" class="v2-toast"></div>
 
 <script>
@@ -1254,7 +1286,7 @@ function slideCount(){
   if(state.mode==='worstBest')return 1+state.worstBest.items.length;
   return 3;
 }
-function updateExportLabels(){const c=slideCount(),btn=$('exportAll');if(!btn)return;let shareable=false;try{const probe=new File([new Blob(['x'],{type:'image/png'})],'p.png',{type:'image/png'});shareable=!!(navigator.canShare&&navigator.canShare({files:[probe]}));}catch(e){}btn.textContent=shareable?`Save ${c} PNGs to Photos`:`Export ${c} PNGs (.zip)`;}
+function updateExportLabels(){const c=slideCount(),btn=$('exportAll');if(!btn)return;let shareable=false;try{const probe=new File([new Blob(['x'],{type:'image/png'})],'p.png',{type:'image/png'});shareable=!!(navigator.canShare&&navigator.canShare({files:[probe]}));}catch(e){}btn.textContent=shareable?`Save ${c} PNGs to Photos`:`Export ${c} PNGs`;}
 let exportLibPromise=null;
 const statusMsg=(text,type='')=>{const el=$('browserStatus');if(!el)return;el.textContent=text;el.className='browserStatus'+(type?' '+type:'');};
 const safeFilePart=s=>String(s||'').trim().replace(/[<>:"/\\|?*\x00-\x1F]/g,'').replace(/\s+/g,'_').slice(0,60)||'Untitled';
@@ -1467,8 +1499,7 @@ function canSharePng(files){
   try{ return !!(navigator.canShare && navigator.canShare({files})); }catch(e){ return false; }
 }
 async function exportCurrent(){const btn=$('exportCurrent');btn.disabled=true;const names=exportNames();statusMsg(`Rendering slide ${cur+1} at 2048×3096…`);try{const file=await makeSlideFile(cur);if(canSharePng([file])){try{await navigator.share({files:[file],title:safeSlug()});statusMsg('Opened share sheet — tap “Save Image” to add it to your camera roll.','ok');return;}catch(err){if(err&&err.name==='AbortError'){statusMsg('Share canceled.','');return;}}}downloadBlob(file,names[cur]||file.name);statusMsg(`Exported ${file.name}.`,'ok');}catch(e){console.error(e);statusMsg(e.message||'Export failed.','err');}finally{btn.disabled=false;}}
-let pendingShare=null;
-async function exportAll(){const btn=$('exportAll'),single=$('exportCurrent'),count=slideCount();if(pendingShare){const files=pendingShare;pendingShare=null;updateExportLabels();try{await navigator.share({files,title:safeSlug()});statusMsg(`Opened share sheet — save all ${files.length} images.`,`ok`);}catch(err){statusMsg(err&&err.name==='AbortError'?'Share canceled.':'Could not open the share sheet.',err&&err.name==='AbortError'?'':'err');}return;}btn.disabled=true;single.disabled=true;try{const files=[];for(let i=0;i<count;i++){statusMsg(`Rendering slide ${i+1}/${count} at 2048×3096…`);files.push(await makeSlideFile(i));}if(canSharePng(files)){try{await navigator.share({files,title:safeSlug()});statusMsg(`Opened share sheet — save all ${count} images.`,`ok`);}catch(err){if(err&&err.name==='AbortError'){statusMsg('Share canceled.','');}else{pendingShare=files;btn.textContent='▸ Tap to save to Photos';statusMsg('Ready — tap again to open the share sheet.','ok');}}}else{statusMsg('Packing PNGs…');const zip=new JSZip();files.forEach(f=>zip.file(f.name,f));const out=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});downloadBlob(out,`${safeSlug()} - Carousel PNGs.zip`);statusMsg(`Exported all ${count} PNGs (.zip).`,'ok');}}catch(e){console.error(e);statusMsg(e.message||'Export failed.','err');}finally{btn.disabled=false;single.disabled=false;}}
+async function exportAll(){return v2ExportAll();}
 function saveProject(){
   try{const blob=new Blob([JSON.stringify(projectSnapshot(),null,2)],{type:'application/json'});downloadBlob(blob,`${safeSlug()}.jmr.json`);statusMsg('Project save downloaded.','ok');}
   catch(e){statusMsg('Could not save project.','err');}
@@ -1761,15 +1792,94 @@ function v2ApplyImported(payload){if(!payload||!Array.isArray(payload.tracks))re
 }
 function v2SetPrefsUI(){const set=(id,v)=>{$v(id).value=v};set('v2DefaultHandle',prefs.handle);set('v2DefaultColor',prefs.color);set('v2DefaultBlur',prefs.blur);set('v2DefaultBright',prefs.bright);set('v2DefaultOpacity',prefs.opacity);$v('v2BlurOut').textContent=prefs.blur;$v('v2BrightOut').textContent=prefs.bright;$v('v2OpacityOut').textContent=prefs.opacity}
 function v2ReadPrefs(){prefs={handle:$v('v2DefaultHandle').value.trim(),color:$v('v2DefaultColor').value,blur:+$v('v2DefaultBlur').value,bright:+$v('v2DefaultBright').value,opacity:+$v('v2DefaultOpacity').value}}
-async function v2ExportAll(){const all=$v('v2ExportAll'),one=$v('v2ExportCurrent');all.disabled=one.disabled=true;const count=slideCount();try{
- const files=[];for(let i=0;i<count;i++){v2Status(`Rendering ${i+1} of ${count} pages…`);files.push(await makeSlideFile(i))}
- // One tap invokes a share sheet when supported, otherwise one ZIP download. Failure falls back automatically.
- let shared=false;
- if(canSharePng(files)){try{await navigator.share({files,title:safeSlug()});shared=true}catch(e){if(e.name==='AbortError'){v2Status('Share canceled');return}}}
- if(!shared){v2Status('Preparing ZIP…');const zip=new JSZip();files.forEach(f=>zip.file(f.name,f));const archive=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});downloadBlob(archive,`${safeSlug()} - All Pages.zip`)}
- v2Status(shared?`Opened share sheet for ${count} images`:`Downloaded ${count} PNGs in one ZIP`,'good');notify('Export ready');
- }catch(e){console.error(e);v2Status('Export failed: '+(e.message||e),'bad')}finally{all.disabled=one.disabled=false;v2FitStage()}}
-async function v2ExportCurrent(){const all=$v('v2ExportAll'),one=$v('v2ExportCurrent');all.disabled=one.disabled=true;try{const index=cur;v2Status(`Rendering page ${index+1}…`);const file=await makeSlideFile(index);let shared=false;if(canSharePng([file])){try{await navigator.share({files:[file],title:safeSlug()});shared=true}catch(e){if(e.name==='AbortError'){v2Status('Share canceled');return}}}if(!shared)downloadBlob(file,file.name);v2Status(shared?'Opened image share sheet':`Downloaded ${file.name}`,'good');notify('Page exported')}catch(e){console.error(e);v2Status('Export failed: '+(e.message||e),'bad')}finally{all.disabled=one.disabled=false;v2FitStage()}}
+// Separate PNGs are the only export format. Safari needs a live user gesture to share files,
+// so if rendering took too long we show a saved-image gallery with a direct Share All action.
+let v2PhotoFiles=[];
+let v2PhotoUrls=[];
+function v2PhotosMessage(text){const el=$v('v2PhotoMessage');if(el)el.textContent=text||'';}
+function v2DisposePhotoUrls(){v2PhotoUrls.forEach(url=>URL.revokeObjectURL(url));v2PhotoUrls=[];}
+function v2ClosePhotoGallery(){
+  $v('v2PhotoGallery').classList.remove('show');document.body.style.overflow='';
+  v2DisposePhotoUrls();v2PhotoFiles=[];$v('v2PhotoList').replaceChildren();
+}
+function v2ShowPhotoGallery(files){
+  v2DisposePhotoUrls();v2PhotoFiles=files.slice();
+  $v('v2PhotoTitle').textContent=`${files.length} PNG ${files.length===1?'Image':'Images'}`;
+  const multi=files.length>1;
+  $v('v2PhotoShareAll').hidden=!(navigator.share&&canSharePng(files));
+  $v('v2PhotoShareAll').textContent=multi?`Share All ${files.length} Images`:'Share Image';
+  const shareable=!!(navigator.share&&canSharePng(files));
+  $v('v2PhotoHelp').textContent=shareable
+    ? 'Tap Share All, then '+(multi?`Save ${files.length} Images`:'Save Image')+' in the iPhone share sheet. If that option is missing, save the PNGs individually below.'
+    : 'Tap Open PNG, then touch and hold the image and choose Save to Photos. Repeat for the other pages.';
+  const container=$v('v2PhotoList');container.replaceChildren();
+  files.forEach((file,i)=>{
+    const url=URL.createObjectURL(file);v2PhotoUrls.push(url);
+    const item=document.createElement('div');item.className='v2-photo-item';
+    const img=document.createElement('img');img.src=url;img.alt=`PNG ${i+1}`;img.draggable=false;
+    const info=document.createElement('div');info.className='v2-photo-info';
+    const name=document.createElement('b');name.textContent=file.name;
+    const actions=document.createElement('div');actions.className='v2-photo-actions';
+    const one=document.createElement('button');one.type='button';one.textContent='Share';one.hidden=!(navigator.share&&canSharePng([file]));
+    one.addEventListener('click',()=>v2SharePhotoFiles([file]));
+    const open=document.createElement('a');open.textContent='Open PNG';open.href=url;open.target='_blank';open.rel='noopener';
+    open.title='Open full-resolution PNG; touch and hold it to save to Photos';
+    actions.append(one,open);info.append(name,actions);item.append(img,info);container.appendChild(item);
+  });
+  v2PhotosMessage('');$v('v2PhotoGallery').classList.add('show');document.body.style.overflow='hidden';
+}
+async function v2SharePhotoFiles(files){
+  // navigator.share() is invoked synchronously before any await, preserving a fresh click gesture.
+  if(!(navigator.share&&canSharePng(files))){v2PhotosMessage('Sharing unavailable. Open each PNG and save it to Photos.');return false;}
+  let pending;
+  try{pending=navigator.share({files});}
+  catch(e){v2PhotosMessage('Could not open the share sheet. Open each PNG instead.');return false;}
+  try{
+    await pending;
+    v2PhotosMessage('Share sheet closed. Check Photos for the saved image'+(files.length===1?'':'s')+'.');
+    return true;
+  }catch(e){
+    v2PhotosMessage(e?.name==='AbortError'?'Share canceled. You can try again.':'Sharing failed. Try saving each PNG separately.');
+    return false;
+  }
+}
+async function v2ExportAll(){
+  const all=$v('v2ExportAll'),one=$v('v2ExportCurrent');all.disabled=one.disabled=true;
+  const count=slideCount();
+  try{
+    const files=[];
+    for(let i=0;i<count;i++){v2Status(`Rendering ${i+1} of ${count} pages…`);files.push(await makeSlideFile(i));}
+    // Try once automatically. If Safari's user activation has expired after rendering,
+    // fallback stays in PNG form (not a ZIP) and lets the user tap Share All directly.
+    if(navigator.share&&canSharePng(files)){
+      try{
+        await navigator.share({files});
+        v2Status(`${count} PNGs shared. Choose Save ${count} Images in the iOS share sheet.`,'good');
+        return;
+      }catch(e){if(e?.name==='AbortError'){v2Status('Share canceled. PNGs are ready below.');}}
+    }
+    v2ShowPhotoGallery(files);
+    v2Status(`${count} PNGs ready. Share all or save individually.`,'good');
+  }catch(e){console.error(e);v2Status('Export failed: '+(e.message||e),'bad');}
+  finally{all.disabled=one.disabled=false;v2FitStage();}
+}
+async function v2ExportCurrent(){
+  const all=$v('v2ExportAll'),one=$v('v2ExportCurrent');all.disabled=one.disabled=true;
+  try{
+    const index=cur;v2Status(`Rendering page ${index+1}…`);
+    const file=await makeSlideFile(index);
+    if(navigator.share&&canSharePng([file])){
+      try{await navigator.share({files:[file]});v2Status('Image shared. Choose Save Image in the iOS share sheet.','good');return;}
+      catch(e){if(e?.name==='AbortError')v2Status('Share canceled. Image is ready below.');}
+    }
+    v2ShowPhotoGallery([file]);v2Status('PNG ready to save to Photos.','good');
+  }catch(e){console.error(e);v2Status('Export failed: '+(e.message||e),'bad');}
+  finally{all.disabled=one.disabled=false;v2FitStage();}
+}
+$v('v2PhotoShareAll').onclick=()=>v2SharePhotoFiles(v2PhotoFiles);
+$v('v2PhotoClose').onclick=v2ClosePhotoGallery;
+$v('v2PhotoGallery').addEventListener('click',e=>{if(e.target===$v('v2PhotoGallery'))v2ClosePhotoGallery();});
+
 async function v2InitProjects(){try{
  const all=await v2GetProjects();if(all.length){v2Projects=all.sort((a,b)=>a.modified-b.modified);v2ProjectId=v2LSget(v2ActiveKey);if(!v2Projects.some(p=>p.id===v2ProjectId))v2ProjectId=v2Projects[0].id;await v2LoadActive(v2CurrentRecord());}
  else{const id='jmr_'+Date.now();v2ProjectId=id;v2Projects=[{id,name:nameFor(state),modified:Date.now(),snapshot:projectSnapshot()}];await v2PutProject(v2Projects[0]);v2BuildTabs();v2BuildControls()}
